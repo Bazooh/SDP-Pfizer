@@ -1,11 +1,12 @@
 from gurobipy import Model, GRB, Var, LinExpr
 import csv
+import matplotlib.pyplot as plt
 
 N_bricks = 22
 N_SR = 4
 epsilon = 0.001
-LOWER_WORKLOAD = 0.8
-UPPER_WORKLOAD = 1.2
+LOWER_WORKLOAD = 0.9
+UPPER_WORKLOAD = 1.1
 
 brick_workload: list[float] = []
 distance_matrix: list[list[float]] = []
@@ -29,10 +30,6 @@ initial_repartition_idx = {
     2: [8, 15, 16, 17],
     3: [0, 1, 2, 18, 19, 20, 21],
 }
-# initial_repartition = {
-#     sr_idx: [brick in initial_repartition_idx[sr_idx] for brick in range(N_bricks)]
-#     for sr_idx in range(N_SR)
-# }
 initial_repartition = {
     brick: sr_idx
     for sr_idx, bricks in initial_repartition_idx.items()
@@ -40,11 +37,12 @@ initial_repartition = {
 }
 
 
-def compute_distances(vars: list[list[Var]]) -> list[LinExpr]:
-    distances = [LinExpr() for _ in range(N_SR)]
+def compute_distances(vars: list[list[Var]]) -> LinExpr:
+    # distances = [LinExpr() for _ in range(N_SR)]
+    distances = LinExpr()
     for sr_idx in range(N_SR):
         for brick in range(N_bricks):
-            distances[sr_idx] += vars[brick][sr_idx] * distance_matrix[brick][sr_idx]
+            distances += vars[brick][sr_idx] * distance_matrix[brick][sr_idx]
     return distances
 
 
@@ -62,6 +60,23 @@ def compute_disruption(vars: list[list[Var]]) -> LinExpr:
         sr_idx = initial_repartition[brick]
         disruption += brick_workload[brick] * (1 - vars[brick][sr_idx])
     return disruption
+
+
+def compute_solutions(m, vars):
+    best_solutions = []
+
+    m.setObjective(compute_distances(vars), GRB.MINIMIZE)
+
+    m.optimize()
+    threshold_disruption = compute_disruption(vars).getValue() - epsilon
+
+    while m.Status == GRB.OPTIMAL:
+        best_solutions.append((m.objVal, compute_disruption(vars).getValue()))
+
+        threshold_disruption = compute_disruption(vars).getValue() - epsilon
+        m.addConstr(compute_disruption(vars) <= threshold_disruption)
+        m.optimize()
+    return best_solutions
 
 
 def main():
@@ -92,50 +107,33 @@ def main():
         m.addConstr(sum == 1)
 
     # Disruption
-    # m.setObjective(compute_disruption(vars), GRB.MINIMIZE)
-    # m.optimize()
-    # print("Disruption: ", m.objVal)
-
+    m.setObjective(compute_disruption(vars), GRB.MINIMIZE)
+    m.optimize()
+    print("Disruption: ", m.objVal)
     # Best disruption : 0.1696
-    best_disruption = 0.1696
 
     # Distance
-    # sum = LinExpr()
-    # for distance in compute_distances(vars):
-    #     sum += distance
-    # m.setObjective(sum, GRB.MINIMIZE)
-    # m.optimize()
-    # print("Distance: ", m.objVal)
-
+    m.setObjective(compute_distances(vars), GRB.MINIMIZE)
+    m.optimize()
+    print("Distance: ", m.objVal)
     # Best distance : 154.62
-    best_distance = 154.62
 
     # Multi-objective, with epsilon-constraint strategy
     # We fix the disruption, and optimize the distance
-    best_solutions = []
-
-    sum = LinExpr()
-    for distance in compute_distances(vars):
-        sum += distance
-    m.setObjective(sum, GRB.MINIMIZE)
-
-    m.optimize()
-    threshold_disruption = compute_disruption(vars).getValue() - epsilon
-
-    while m.Status == GRB.OPTIMAL:
-        best_solutions.append(m.objVal)
-
-        threshold_disruption = compute_disruption(vars).getValue() - epsilon
-        m.addConstr(compute_disruption(vars) <= threshold_disruption)
-
-        sum = LinExpr()
-        for distance in compute_distances(vars):
-            sum += distance
-        m.setObjective(sum, GRB.MINIMIZE)
-
-        m.optimize()
+    best_solutions = compute_solutions(m, vars)
 
     print("number of solutions:", len(best_solutions))
+
+    plt.figure(figsize=(10, 6))
+    plt.scatter(
+        [solution[0] for solution in best_solutions],
+        [solution[1] for solution in best_solutions],
+    )
+    plt.xlabel("Distance")
+    plt.ylabel("Disruption")
+    plt.title("Distance vs Disruption")
+    plt.grid(True)
+    plt.show()
 
 
 if __name__ == "__main__":
