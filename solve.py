@@ -1,9 +1,8 @@
 from gurobipy import Model, GRB, Var, LinExpr
 import csv
+import json
 import matplotlib.pyplot as plt
 
-N_bricks = 22
-N_SR = 4
 epsilon = 0.001
 LOWER_WORKLOAD = 0.8
 UPPER_WORKLOAD = 1.2
@@ -11,30 +10,37 @@ UPPER_WORKLOAD = 1.2
 brick_workload: list[float] = []
 distance_matrix: list[list[float]] = []
 
-with open("brick_rp_distances.csv", mode="r") as file:
+# initial_repartition_idx = {
+#     0: [3, 4, 5, 6, 7, 14],
+#     1: [9, 10, 11, 12, 13],
+#     2: [8, 15, 16, 17],
+#     3: [0, 1, 2, 18, 19, 20, 21],
+# }
+
+with open("brick_rp_distances10-100.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
         distance_matrix.append(list(map(float, row[1:])))
 
 
-with open("bricks_index_values.csv", mode="r") as file:
+with open("bricks_index_values10-100.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
         brick_workload.append(float(row[1]))
 
-initial_repartition_idx = {
-    0: [3, 4, 5, 6, 7, 14],
-    1: [9, 10, 11, 12, 13],
-    2: [8, 15, 16, 17],
-    3: [0, 1, 2, 18, 19, 20, 21],
-}
+with open("brick_rp_affectation10-100.json", mode="r") as file:
+    initial_repartition_idx = json.load(file)
+
 initial_repartition = {
-    brick: sr_idx
+    brick: int(sr_idx)
     for sr_idx, bricks in initial_repartition_idx.items()
     for brick in bricks
 }
+
+N_SR = len(initial_repartition_idx)
+N_bricks = len(brick_workload)
 
 
 def compute_distances(vars: list[list[Var]]) -> LinExpr:
@@ -109,33 +115,33 @@ def main():
         m.addConstr(sum == 1)
 
     # Disruption
-    m.setObjective(compute_disruption(vars), GRB.MINIMIZE)
-    m.optimize()
-    print("Disruption: ", m.objVal)
+    # m.setObjective(compute_disruption(vars), GRB.MINIMIZE)
+    # m.optimize()
+    # print("Disruption: ", m.objVal)
     # Best disruption : 0.1696
 
     # Distance
-    m.setObjective(compute_distances(vars), GRB.MINIMIZE)
-    m.optimize()
-    print("Distance: ", m.objVal)
+    # m.setObjective(compute_distances(vars), GRB.MINIMIZE)
+    # m.optimize()
+    # print("Distance: ", m.objVal)
     # Best distance : 154.62
 
     # Multi-objective, with epsilon-constraint strategy
     # We fix the disruption, and optimize the distance
-    # best_solutions = compute_solutions(m, vars)
+    best_solutions = compute_solutions(m, vars)
 
     # print("number of solutions:", len(best_solutions))
 
-    # plt.figure(figsize=(10, 6))
-    # plt.scatter(
-    #     [solution[0] for solution in best_solutions],
-    #     [solution[1] for solution in best_solutions],
-    # )
-    # plt.xlabel("Distance")
-    # plt.ylabel("Disruption")
-    # plt.title("Distance vs Disruption")
-    # plt.grid(True)
-    # plt.show()
+    plt.figure(figsize=(10, 6))
+    plt.scatter(
+        [solution[0] for solution in best_solutions],
+        [solution[1] for solution in best_solutions],
+    )
+    plt.xlabel("Distance")
+    plt.ylabel("Disruption")
+    plt.title("Distance vs Disruption")
+    plt.grid(True)
+    plt.show()
 
 
 if __name__ == "__main__":
