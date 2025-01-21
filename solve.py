@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 N_bricks = 22
 N_SR = 4
 epsilon = 0.001
-LOWER_WORKLOAD = 0.9
-UPPER_WORKLOAD = 1.1
+LOWER_WORKLOAD = 0.8
+UPPER_WORKLOAD = 1.2
 
 brick_workload: list[float] = []
 distance_matrix: list[list[float]] = []
@@ -38,7 +38,6 @@ initial_repartition = {
 
 
 def compute_distances(vars: list[list[Var]]) -> LinExpr:
-    # distances = [LinExpr() for _ in range(N_SR)]
     distances = LinExpr()
     for sr_idx in range(N_SR):
         for brick in range(N_bricks):
@@ -60,6 +59,8 @@ def compute_disruption(vars: list[list[Var]]) -> LinExpr:
         sr_idx = initial_repartition[brick]
         disruption += brick_workload[brick] * (1 - vars[brick][sr_idx])
     return disruption
+    # print(list(brick_workload[i] * ((vars[i][j] - int(j in initial_repartition_idx[i]))**2) for i in range(N_bricks) for j in range(N_SR)))
+    # return sum(brick_workload[i] * ((vars[i][j] - int(i in initial_repartition_idx[j]))**2) for i in range(N_bricks) for j in range(N_SR))
 
 
 def compute_solutions(m, vars):
@@ -76,6 +77,7 @@ def compute_solutions(m, vars):
         threshold_disruption = compute_disruption(vars).getValue() - epsilon
         m.addConstr(compute_disruption(vars) <= threshold_disruption)
         m.optimize()
+
     return best_solutions
 
 
@@ -120,20 +122,20 @@ def main():
 
     # Multi-objective, with epsilon-constraint strategy
     # We fix the disruption, and optimize the distance
-    best_solutions = compute_solutions(m, vars)
+    # best_solutions = compute_solutions(m, vars)
 
-    print("number of solutions:", len(best_solutions))
+    # print("number of solutions:", len(best_solutions))
 
-    plt.figure(figsize=(10, 6))
-    plt.scatter(
-        [solution[0] for solution in best_solutions],
-        [solution[1] for solution in best_solutions],
-    )
-    plt.xlabel("Distance")
-    plt.ylabel("Disruption")
-    plt.title("Distance vs Disruption")
-    plt.grid(True)
-    plt.show()
+    # plt.figure(figsize=(10, 6))
+    # plt.scatter(
+    #     [solution[0] for solution in best_solutions],
+    #     [solution[1] for solution in best_solutions],
+    # )
+    # plt.xlabel("Distance")
+    # plt.ylabel("Disruption")
+    # plt.title("Distance vs Disruption")
+    # plt.grid(True)
+    # plt.show()
 
 
 if __name__ == "__main__":
