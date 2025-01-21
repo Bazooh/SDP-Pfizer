@@ -88,13 +88,28 @@ def compute_solutions(m: Model, vars: list[list[Var]]) -> list:
     m.setObjective(compute_distances(m, vars), GRB.MAXIMIZE)
 
     m.optimize()
-    threshold_disruption = compute_disruption(vars).getValue() - epsilon
+
+    max_workload_error = 0
+    for var in compute_workloads(vars):
+        max_workload_error = max(max_workload_error, abs(1 - var.getValue()))
+
+    threshold_workload = max_workload_error - epsilon
 
     while m.Status == GRB.OPTIMAL:
-        best_solutions.append((-m.objVal, compute_disruption(vars).getValue()))
+        workloads = compute_workloads(vars)
 
-        threshold_disruption = compute_disruption(vars).getValue() - epsilon
-        m.addConstr(compute_disruption(vars) <= threshold_disruption)
+        best_solutions.append((-m.objVal, threshold_workload + epsilon))
+
+        max_workload_error = 0
+        for var in workloads:
+            max_workload_error = max(max_workload_error, abs(1 - var.getValue()))
+
+        threshold_workload = max_workload_error - epsilon
+
+        for i in range(N_SR):
+            m.addConstr(workloads[i] <= 1 + threshold_workload)
+            m.addConstr(workloads[i] >= 1 - threshold_workload)
+
         m.optimize()
 
     return best_solutions
