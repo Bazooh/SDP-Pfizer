@@ -10,13 +10,6 @@ UPPER_WORKLOAD = 1.2
 brick_workload: list[float] = []
 distance_matrix: list[list[float]] = []
 
-# initial_repartition_idx = {
-#     0: [3, 4, 5, 6, 7, 14],
-#     1: [9, 10, 11, 12, 13],
-#     2: [8, 15, 16, 17],
-#     3: [0, 1, 2, 18, 19, 20, 21],
-# }
-
 with open("brick_rp_distances.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
@@ -25,13 +18,11 @@ with open("brick_rp_distances.csv", mode="r") as file:
 
 
 with open("bricks_index_values.csv", mode="r") as file:
-with open("bricks_index_values.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
         brick_workload.append(float(row[1]))
 
-with open("brick_rp_affectation.json", mode="r") as file:
 with open("brick_rp_affectation.json", mode="r") as file:
     initial_repartition_idx = json.load(file)
 
@@ -60,14 +51,6 @@ def compute_workloads(vars: list[list[Var]]) -> list[LinExpr]:
             workloads[sr_idx] += vars[brick][sr_idx] * brick_workload[brick]
     return workloads
 
-def compute_size_disruption(vars: list[list[Var]]) -> LinExpr:
-    size_disruption = LinExpr()
-    for sr_idx in range(N_SR):
-        for brick in range(N_bricks):
-            if sr_idx != initial_repartition[brick]:  # Only consider changes in assignments
-                size_disruption += vars[brick][sr_idx]
-                break
-    return size_disruption
 
 def compute_disruption(vars: list[list[Var]]) -> LinExpr:
     halfDisruption = LinExpr()
@@ -88,13 +71,7 @@ def compute_solutions(m, vars):
     threshold_disruption = compute_disruption(vars).getValue() - epsilon
 
     while m.Status == GRB.OPTIMAL:
-        best_solutions.append({
-            "objVal": m.objVal, 
-            "disruption": compute_disruption(vars).getValue(),
-            "size_disruption": compute_size_disruption(vars).getValue(),
-            "total_distance": compute_distances(vars).getValue(), 
-            "max_workload": max([workload.getValue() for workload in compute_workloads(vars)])
-        })
+        best_solutions.append((m.objVal, compute_disruption(vars).getValue()))
 
         threshold_disruption = compute_disruption(vars).getValue() - epsilon
         m.addConstr(compute_disruption(vars) <= threshold_disruption)
@@ -103,7 +80,7 @@ def compute_solutions(m, vars):
     return best_solutions
 
 
-def get_non_dominated_solutions(plot = False):
+def main():
     # initialize model
     m = Model("solve")
     vars: list[list[Var]] = []
@@ -116,7 +93,7 @@ def get_non_dominated_solutions(plot = False):
     for brick in range(N_bricks):
         v = []
         for sr_idx in range(N_SR):
-            v.append(m.addVar(vtype=GRB.BINARY))
+            v.append(m.addVar(vtype=GRB.CONTINUOUS, lb=0, ub=1))
         vars.append(v)
 
     # create constraints
@@ -148,22 +125,21 @@ def get_non_dominated_solutions(plot = False):
 
     # Multi-objective, with epsilon-constraint strategy
     # We fix the disruption, and optimize the distance
-    non_dominated_solutions = compute_solutions(m, vars)
+    # best_solutions = compute_solutions(m, vars)
 
-    if plot: 
-        plt.figure(figsize=(10, 6))
-        plt.plot(
-            [solution["objVal"] for solution in non_dominated_solutions],
-            [solution["disruption"] for solution in non_dominated_solutions],
-            marker = "x"
-        )
-        plt.xlabel("Distance")
-        plt.ylabel("Disruption")
-        plt.title("Distance vs Disruption")
-        plt.grid(True)
-        plt.savefig("Non_Dominated_Solutions.png")
-    
-    return non_dominated_solutions
+    # print("number of solutions:", len(best_solutions))
+
+    # plt.figure(figsize=(10, 6))
+    # plt.scatter(
+    #     [solution[0] for solution in best_solutions],
+    #     [solution[1] for solution in best_solutions],
+    # )
+    # plt.xlabel("Distance")
+    # plt.ylabel("Disruption")
+    # plt.title("Distance vs Disruption")
+    # plt.grid(True)
+    # plt.show()
+
 
 if __name__ == "__main__":
-    get_non_dominated_solutions(plot = False)
+    main()

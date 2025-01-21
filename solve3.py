@@ -8,32 +8,31 @@ LOWER_WORKLOAD = 0.8
 UPPER_WORKLOAD = 1.2
 
 brick_workload: list[float] = []
-distance_matrix: list[list[float]] = []
-
-# initial_repartition_idx = {
-#     0: [3, 4, 5, 6, 7, 14],
-#     1: [9, 10, 11, 12, 13],
-#     2: [8, 15, 16, 17],
-#     3: [0, 1, 2, 18, 19, 20, 21],
-# }
+distance_rp_to_brick: list[list[float]] = []
+"""[brick][rp]"""
+distance_brick_to_brick: list[list[float]] = []
 
 with open("brick_rp_distances.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
-        distance_matrix.append(list(map(float, row[1:])))
+        distance_rp_to_brick.append(list(map(float, row[1:])))
 
 
-with open("bricks_index_values.csv", mode="r") as file:
 with open("bricks_index_values.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
-        brick_workload.append(float(row[1]))
+        brick_workload.append(float(row[1]) * 1.25)
 
 with open("brick_rp_affectation.json", mode="r") as file:
-with open("brick_rp_affectation.json", mode="r") as file:
     initial_repartition_idx = json.load(file)
+
+with open("distances22-4.csv", mode="r") as file:
+    reader = csv.reader(file, delimiter=",")
+    next(reader)
+    for row in reader:
+        distance_brick_to_brick.append(list(map(float, row)))
 
 initial_repartition = {
     brick: int(sr_idx)
@@ -41,16 +40,29 @@ initial_repartition = {
     for brick in bricks
 }
 
-N_SR = len(initial_repartition_idx)
+N_SR = len(initial_repartition_idx) + 1
 N_bricks = len(brick_workload)
 
 
-def compute_distances(vars: list[list[Var]]) -> LinExpr:
-    halfDistances = LinExpr()
-    for sr_idx in range(N_SR):
+def compute_distances(model: Model, vars: list[list[Var]]) -> LinExpr:
+    distances = LinExpr()
+    for sr_idx in range(N_SR - 1):
         for brick in range(N_bricks):
-            halfDistances += vars[brick][sr_idx] * distance_matrix[brick][sr_idx]
-    return 2 * halfDistances  # parce que aller-retour
+            distances += vars[brick][sr_idx] * distance_rp_to_brick[brick][sr_idx]
+
+    best_distance = model.addVar(vtype=GRB.CONTINUOUS)
+
+    for main_brick in range(N_bricks):
+        distance = LinExpr()
+        for brick in range(N_bricks):
+            distance += (
+                vars[main_brick][N_SR - 1]
+                * vars[brick][N_SR - 1]
+                * distance_brick_to_brick[main_brick][brick]
+            )
+        model.addConstr(best_distance >= distance)
+
+    return -(distances + best_distance)
 
 
 def compute_workloads(vars: list[list[Var]]) -> list[LinExpr]:
@@ -60,41 +72,27 @@ def compute_workloads(vars: list[list[Var]]) -> list[LinExpr]:
             workloads[sr_idx] += vars[brick][sr_idx] * brick_workload[brick]
     return workloads
 
-def compute_size_disruption(vars: list[list[Var]]) -> LinExpr:
-    size_disruption = LinExpr()
-    for sr_idx in range(N_SR):
-        for brick in range(N_bricks):
-            if sr_idx != initial_repartition[brick]:  # Only consider changes in assignments
-                size_disruption += vars[brick][sr_idx]
-                break
-    return size_disruption
 
 def compute_disruption(vars: list[list[Var]]) -> LinExpr:
-    halfDisruption = LinExpr()
+    disruption = LinExpr()
     for brick in range(N_bricks):
         sr_idx = initial_repartition[brick]
-        halfDisruption += brick_workload[brick] * (1 - vars[brick][sr_idx])
-    return 2 * halfDisruption
+        disruption += brick_workload[brick] * (1 - vars[brick][sr_idx])
+    return disruption
     # print(list(brick_workload[i] * ((vars[i][j] - int(j in initial_repartition_idx[i]))**2) for i in range(N_bricks) for j in range(N_SR)))
     # return sum(brick_workload[i] * ((vars[i][j] - int(i in initial_repartition_idx[j]))**2) for i in range(N_bricks) for j in range(N_SR))
 
 
-def compute_solutions(m, vars):
+def compute_solutions(m: Model, vars: list[list[Var]]) -> list:
     best_solutions = []
 
-    m.setObjective(compute_distances(vars), GRB.MINIMIZE)
+    m.setObjective(compute_distances(m, vars), GRB.MAXIMIZE)
 
     m.optimize()
     threshold_disruption = compute_disruption(vars).getValue() - epsilon
 
     while m.Status == GRB.OPTIMAL:
-        best_solutions.append({
-            "objVal": m.objVal, 
-            "disruption": compute_disruption(vars).getValue(),
-            "size_disruption": compute_size_disruption(vars).getValue(),
-            "total_distance": compute_distances(vars).getValue(), 
-            "max_workload": max([workload.getValue() for workload in compute_workloads(vars)])
-        })
+        best_solutions.append((-m.objVal, compute_disruption(vars).getValue()))
 
         threshold_disruption = compute_disruption(vars).getValue() - epsilon
         m.addConstr(compute_disruption(vars) <= threshold_disruption)
@@ -103,7 +101,7 @@ def compute_solutions(m, vars):
     return best_solutions
 
 
-def get_non_dominated_solutions(plot = False):
+def main():
     # initialize model
     m = Model("solve")
     vars: list[list[Var]] = []
@@ -120,14 +118,10 @@ def get_non_dominated_solutions(plot = False):
         vars.append(v)
 
     # create constraints
-
-    # Workloads around 1
     workloads = compute_workloads(vars)
     for sr_idx in range(N_SR):
         m.addConstr(LOWER_WORKLOAD <= workloads[sr_idx])
         m.addConstr(workloads[sr_idx] <= UPPER_WORKLOAD)
-
-    # 1 SR per brick
     for brick in range(N_bricks):
         sum = LinExpr()
         for sr_idx in range(N_SR):
@@ -135,35 +129,34 @@ def get_non_dominated_solutions(plot = False):
         m.addConstr(sum == 1)
 
     # Disruption
-    m.setObjective(compute_disruption(vars), GRB.MINIMIZE)
-    m.optimize()
-    print("Disruption: ", m.objVal)
-    # Best disruption : 0.3391
+    # m.setObjective(compute_disruption(vars), GRB.MAXIMIZE)
+    # m.optimize()
+    # print("Disruption: ", m.objVal)
+    # Best disruption : 0.1696
 
     # Distance
-    m.setObjective(compute_distances(vars), GRB.MINIMIZE)
-    m.optimize()
-    print("Distance: ", m.objVal)
-    # Best distance : 309.24
+    # m.setObjective(compute_distances(m, vars), GRB.MAXIMIZE)
+    # m.optimize()
+    # print("Distance: ", m.objVal)
+    # Best distance : 154.62
 
     # Multi-objective, with epsilon-constraint strategy
     # We fix the disruption, and optimize the distance
-    non_dominated_solutions = compute_solutions(m, vars)
+    best_solutions = compute_solutions(m, vars)
 
-    if plot: 
-        plt.figure(figsize=(10, 6))
-        plt.plot(
-            [solution["objVal"] for solution in non_dominated_solutions],
-            [solution["disruption"] for solution in non_dominated_solutions],
-            marker = "x"
-        )
-        plt.xlabel("Distance")
-        plt.ylabel("Disruption")
-        plt.title("Distance vs Disruption")
-        plt.grid(True)
-        plt.savefig("Non_Dominated_Solutions.png")
-    
-    return non_dominated_solutions
+    # print("number of solutions:", len(best_solutions))
+
+    plt.figure(figsize=(10, 6))
+    plt.scatter(
+        [solution[0] for solution in best_solutions],
+        [solution[1] for solution in best_solutions],
+    )
+    plt.xlabel("Distance")
+    plt.ylabel("Disruption")
+    plt.title("Distance vs Disruption")
+    plt.grid(True)
+    plt.show()
+
 
 if __name__ == "__main__":
-    get_non_dominated_solutions(plot = False)
+    main()
