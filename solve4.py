@@ -78,8 +78,6 @@ def compute_disruption(vars: list[list[Var]]) -> LinExpr:
         sr_idx = initial_repartition[brick]
         disruption += brick_workload[brick] * (1 - vars[brick][sr_idx])
     return disruption
-    # print(list(brick_workload[i] * ((vars[i][j] - int(j in initial_repartition_idx[i]))**2) for i in range(N_bricks) for j in range(N_SR)))
-    # return sum(brick_workload[i] * ((vars[i][j] - int(i in initial_repartition_idx[j]))**2) for i in range(N_bricks) for j in range(N_SR))
 
 
 def compute_solutions(m: Model, vars: list[list[Var]]) -> list:
