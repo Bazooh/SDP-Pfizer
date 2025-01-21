@@ -12,21 +12,27 @@ distance_rp_to_brick: list[list[float]] = []
 """[brick][rp]"""
 distance_brick_to_brick: list[list[float]] = []
 
-with open("brick_rp_distances10-100.csv", mode="r") as file:
+with open("brick_rp_distances.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
         distance_rp_to_brick.append(list(map(float, row[1:])))
 
 
-with open("bricks_index_values10-100.csv", mode="r") as file:
+with open("bricks_index_values.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
-        brick_workload.append(float(row[1]))
+        brick_workload.append(float(row[1]) * 1.25)
 
-with open("brick_rp_affectation10-100.json", mode="r") as file:
+with open("brick_rp_affectation.json", mode="r") as file:
     initial_repartition_idx = json.load(file)
+
+with open("distances22-4.csv", mode="r") as file:
+    reader = csv.reader(file, delimiter=",")
+    next(reader)
+    for row in reader:
+        distance_brick_to_brick.append(list(map(float, row)))
 
 initial_repartition = {
     brick: int(sr_idx)
@@ -38,12 +44,25 @@ N_SR = len(initial_repartition_idx) + 1
 N_bricks = len(brick_workload)
 
 
-def compute_distances(vars: list[list[Var]]) -> LinExpr:
+def compute_distances(model: Model, vars: list[list[Var]]) -> LinExpr:
     distances = LinExpr()
     for sr_idx in range(N_SR - 1):
         for brick in range(N_bricks):
             distances += vars[brick][sr_idx] * distance_rp_to_brick[brick][sr_idx]
-    return distances
+
+    best_distance = model.addVar(vtype=GRB.CONTINUOUS)
+
+    for main_brick in range(N_bricks):
+        distance = LinExpr()
+        for brick in range(N_bricks):
+            distance += (
+                vars[main_brick][N_SR - 1]
+                * vars[brick][N_SR - 1]
+                * distance_brick_to_brick[main_brick][brick]
+            )
+        model.addConstr(best_distance >= distance)
+
+    return -(distances + best_distance)
 
 
 def compute_workloads(vars: list[list[Var]]) -> list[LinExpr]:
@@ -67,13 +86,13 @@ def compute_disruption(vars: list[list[Var]]) -> LinExpr:
 def compute_solutions(m: Model, vars: list[list[Var]]) -> list:
     best_solutions = []
 
-    m.setObjective(compute_distances(vars), GRB.MINIMIZE)
+    m.setObjective(compute_distances(m, vars), GRB.MAXIMIZE)
 
     m.optimize()
     threshold_disruption = compute_disruption(vars).getValue() - epsilon
 
     while m.Status == GRB.OPTIMAL:
-        best_solutions.append((m.objVal, compute_disruption(vars).getValue()))
+        best_solutions.append((-m.objVal, compute_disruption(vars).getValue()))
 
         threshold_disruption = compute_disruption(vars).getValue() - epsilon
         m.addConstr(compute_disruption(vars) <= threshold_disruption)
@@ -110,13 +129,13 @@ def main():
         m.addConstr(sum == 1)
 
     # Disruption
-    # m.setObjective(compute_disruption(vars), GRB.MINIMIZE)
+    # m.setObjective(compute_disruption(vars), GRB.MAXIMIZE)
     # m.optimize()
     # print("Disruption: ", m.objVal)
     # Best disruption : 0.1696
 
     # Distance
-    # m.setObjective(compute_distances(vars), GRB.MINIMIZE)
+    # m.setObjective(compute_distances(m, vars), GRB.MAXIMIZE)
     # m.optimize()
     # print("Distance: ", m.objVal)
     # Best distance : 154.62
