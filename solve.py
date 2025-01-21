@@ -10,11 +10,19 @@ UPPER_WORKLOAD = 1.2
 brick_workload: list[float] = []
 distance_matrix: list[list[float]] = []
 
+# initial_repartition_idx = {
+#     0: [3, 4, 5, 6, 7, 14],
+#     1: [9, 10, 11, 12, 13],
+#     2: [8, 15, 16, 17],
+#     3: [0, 1, 2, 18, 19, 20, 21],
+# }
+
 with open("brick_rp_distances.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
         distance_matrix.append(list(map(float, row[1:])))
+
 
 
 with open("bricks_index_values.csv", mode="r") as file:
@@ -51,6 +59,14 @@ def compute_workloads(vars: list[list[Var]]) -> list[LinExpr]:
             workloads[sr_idx] += vars[brick][sr_idx] * brick_workload[brick]
     return workloads
 
+def compute_size_disruption(vars: list[list[Var]]):
+    size_disruption = 0
+    for sr_idx in range(N_SR):
+        for brick in range(N_bricks):
+            if sr_idx != initial_repartition[brick] and vars[brick][sr_idx].X == 1:  
+                size_disruption += 1
+                break
+    return size_disruption
 
 def compute_disruption(vars: list[list[Var]]) -> LinExpr:
     halfDisruption = LinExpr()
@@ -71,7 +87,13 @@ def compute_solutions(m, vars):
     threshold_disruption = compute_disruption(vars).getValue() - epsilon
 
     while m.Status == GRB.OPTIMAL:
-        best_solutions.append((m.objVal, compute_disruption(vars).getValue()))
+        best_solutions.append({
+            "objVal": m.objVal, 
+            "disruption": compute_disruption(vars).getValue(),
+            "size_disruption": compute_size_disruption(vars),
+            "total_distance": compute_distances(vars).getValue(), 
+            "max_workload": max([workload.getValue() for workload in compute_workloads(vars)])
+        })
 
         threshold_disruption = compute_disruption(vars).getValue() - epsilon
         m.addConstr(compute_disruption(vars) <= threshold_disruption)
@@ -80,7 +102,7 @@ def compute_solutions(m, vars):
     return best_solutions
 
 
-def main():
+def get_non_dominated_solutions(plot = False):
     # initialize model
     m = Model("solve")
     vars: list[list[Var]] = []
@@ -125,21 +147,22 @@ def main():
 
     # Multi-objective, with epsilon-constraint strategy
     # We fix the disruption, and optimize the distance
-    # best_solutions = compute_solutions(m, vars)
+    non_dominated_solutions = compute_solutions(m, vars)
 
-    # print("number of solutions:", len(best_solutions))
-
-    # plt.figure(figsize=(10, 6))
-    # plt.scatter(
-    #     [solution[0] for solution in best_solutions],
-    #     [solution[1] for solution in best_solutions],
-    # )
-    # plt.xlabel("Distance")
-    # plt.ylabel("Disruption")
-    # plt.title("Distance vs Disruption")
-    # plt.grid(True)
-    # plt.show()
-
+    if plot: 
+        plt.figure(figsize=(10, 6))
+        plt.plot(
+            [solution["objVal"] for solution in non_dominated_solutions],
+            [solution["disruption"] for solution in non_dominated_solutions],
+            marker = "x"
+        )
+        plt.xlabel("Distance")
+        plt.ylabel("Disruption")
+        plt.title("Distance vs Disruption")
+        plt.grid(True)
+        plt.savefig("Non_Dominated_Solutions.png")
+    print(non_dominated_solutions)
+    return non_dominated_solutions
 
 if __name__ == "__main__":
-    main()
+    get_non_dominated_solutions(plot = False)

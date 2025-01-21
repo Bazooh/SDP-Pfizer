@@ -23,7 +23,7 @@ with open("bricks_index_values.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
-        brick_workload.append(float(row[1]) * 1.25)
+        brick_workload.append(float(row[1]))
 
 with open("brick_rp_affectation.json", mode="r") as file:
     initial_repartition_idx = json.load(file)
@@ -40,29 +40,28 @@ initial_repartition = {
     for brick in bricks
 }
 
-N_SR = len(initial_repartition_idx) + 1
+N_SR = len(initial_repartition_idx)
 N_bricks = len(brick_workload)
 
 
 def compute_distances(model: Model, vars: list[list[Var]]) -> LinExpr:
     distances = LinExpr()
-    for sr_idx in range(N_SR - 1):
-        for brick in range(N_bricks):
-            distances += vars[brick][sr_idx] * distance_rp_to_brick[brick][sr_idx]
+    for sr_idx in range(N_SR):
+        best_distance = model.addVar(vtype=GRB.CONTINUOUS)
 
-    best_distance = model.addVar(vtype=GRB.CONTINUOUS)
+        for main_brick in range(N_bricks):
+            distance = LinExpr()
+            for brick in range(N_bricks):
+                distance += (
+                    vars[main_brick][sr_idx]
+                    * vars[brick][sr_idx]
+                    * distance_brick_to_brick[main_brick][brick]
+                )
+            model.addConstr(best_distance >= distance)
 
-    for main_brick in range(N_bricks):
-        distance = LinExpr()
-        for brick in range(N_bricks):
-            distance += (
-                vars[main_brick][N_SR - 1]
-                * vars[brick][N_SR - 1]
-                * distance_brick_to_brick[main_brick][brick]
-            )
-        model.addConstr(best_distance >= distance)
+        distances += best_distance
 
-    return -(distances + best_distance)
+    return -distances
 
 
 def compute_workloads(vars: list[list[Var]]) -> list[LinExpr]:
