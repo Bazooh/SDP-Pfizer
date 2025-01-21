@@ -10,7 +10,7 @@ UPPER_WORKLOAD = 1.2
 brick_workload: list[float] = []
 distance_matrix: list[list[float]] = []
 
-with open("brick_rp_distances10-100.csv", mode="r") as file:
+with open("brick_rp_distances.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
