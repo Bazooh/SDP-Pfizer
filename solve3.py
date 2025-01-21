@@ -8,22 +8,24 @@ LOWER_WORKLOAD = 0.8
 UPPER_WORKLOAD = 1.2
 
 brick_workload: list[float] = []
-distance_matrix: list[list[float]] = []
+distance_rp_to_brick: list[list[float]] = []
+"""[brick][rp]"""
+distance_brick_to_brick: list[list[float]] = []
 
 with open("brick_rp_distances10-100.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
-        distance_matrix.append(list(map(float, row[1:])))
+        distance_rp_to_brick.append(list(map(float, row[1:])))
 
 
-with open("bricks_index_values.csv", mode="r") as file:
+with open("bricks_index_values10-100.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
         brick_workload.append(float(row[1]))
 
-with open("brick_rp_affectation.json", mode="r") as file:
+with open("brick_rp_affectation10-100.json", mode="r") as file:
     initial_repartition_idx = json.load(file)
 
 initial_repartition = {
@@ -32,16 +34,16 @@ initial_repartition = {
     for brick in bricks
 }
 
-N_SR = len(initial_repartition_idx)
+N_SR = len(initial_repartition_idx) + 1
 N_bricks = len(brick_workload)
 
 
 def compute_distances(vars: list[list[Var]]) -> LinExpr:
-    halfDistances = LinExpr()
-    for sr_idx in range(N_SR):
+    distances = LinExpr()
+    for sr_idx in range(N_SR - 1):
         for brick in range(N_bricks):
-            halfDistances += vars[brick][sr_idx] * distance_matrix[brick][sr_idx]
-    return 2 * halfDistances  # parce que aller-retour
+            distances += vars[brick][sr_idx] * distance_rp_to_brick[brick][sr_idx]
+    return distances
 
 
 def compute_workloads(vars: list[list[Var]]) -> list[LinExpr]:
@@ -53,16 +55,16 @@ def compute_workloads(vars: list[list[Var]]) -> list[LinExpr]:
 
 
 def compute_disruption(vars: list[list[Var]]) -> LinExpr:
-    halfDisruption = LinExpr()
+    disruption = LinExpr()
     for brick in range(N_bricks):
         sr_idx = initial_repartition[brick]
-        halfDisruption += brick_workload[brick] * (1 - vars[brick][sr_idx])
-    return 2 * halfDisruption
+        disruption += brick_workload[brick] * (1 - vars[brick][sr_idx])
+    return disruption
     # print(list(brick_workload[i] * ((vars[i][j] - int(j in initial_repartition_idx[i]))**2) for i in range(N_bricks) for j in range(N_SR)))
     # return sum(brick_workload[i] * ((vars[i][j] - int(i in initial_repartition_idx[j]))**2) for i in range(N_bricks) for j in range(N_SR))
 
 
-def compute_solutions(m, vars):
+def compute_solutions(m: Model, vars: list[list[Var]]) -> list:
     best_solutions = []
 
     m.setObjective(compute_distances(vars), GRB.MINIMIZE)
@@ -97,14 +99,10 @@ def main():
         vars.append(v)
 
     # create constraints
-
-    # Workloads around 1
     workloads = compute_workloads(vars)
     for sr_idx in range(N_SR):
         m.addConstr(LOWER_WORKLOAD <= workloads[sr_idx])
         m.addConstr(workloads[sr_idx] <= UPPER_WORKLOAD)
-
-    # 1 SR per brick
     for brick in range(N_bricks):
         sum = LinExpr()
         for sr_idx in range(N_SR):
@@ -112,33 +110,33 @@ def main():
         m.addConstr(sum == 1)
 
     # Disruption
-    m.setObjective(compute_disruption(vars), GRB.MINIMIZE)
-    m.optimize()
-    print("Disruption: ", m.objVal)
-    # Best disruption : 0.3391
+    # m.setObjective(compute_disruption(vars), GRB.MINIMIZE)
+    # m.optimize()
+    # print("Disruption: ", m.objVal)
+    # Best disruption : 0.1696
 
     # Distance
-    m.setObjective(compute_distances(vars), GRB.MINIMIZE)
-    m.optimize()
-    print("Distance: ", m.objVal)
-    # Best distance : 309.24
+    # m.setObjective(compute_distances(vars), GRB.MINIMIZE)
+    # m.optimize()
+    # print("Distance: ", m.objVal)
+    # Best distance : 154.62
 
     # Multi-objective, with epsilon-constraint strategy
     # We fix the disruption, and optimize the distance
-    # best_solutions = compute_solutions(m, vars)
+    best_solutions = compute_solutions(m, vars)
 
     # print("number of solutions:", len(best_solutions))
 
-    # plt.figure(figsize=(10, 6))
-    # plt.scatter(
-    #     [solution[0] for solution in best_solutions],
-    #     [solution[1] for solution in best_solutions],
-    # )
-    # plt.xlabel("Distance")
-    # plt.ylabel("Disruption")
-    # plt.title("Distance vs Disruption")
-    # plt.grid(True)
-    # plt.show()
+    plt.figure(figsize=(10, 6))
+    plt.scatter(
+        [solution[0] for solution in best_solutions],
+        [solution[1] for solution in best_solutions],
+    )
+    plt.xlabel("Distance")
+    plt.ylabel("Disruption")
+    plt.title("Distance vs Disruption")
+    plt.grid(True)
+    plt.show()
 
 
 if __name__ == "__main__":
