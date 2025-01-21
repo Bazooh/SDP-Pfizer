@@ -93,7 +93,7 @@ def main():
     for brick in range(N_bricks):
         v = []
         for sr_idx in range(N_SR):
-            v.append(m.addVar(vtype=GRB.BINARY))
+            v.append(m.addVar(vtype=GRB.CONTINUOUS, lb=0, ub=1))
         vars.append(v)
 
     # create constraints
