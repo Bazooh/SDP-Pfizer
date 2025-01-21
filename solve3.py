@@ -8,13 +8,15 @@ LOWER_WORKLOAD = 0.8
 UPPER_WORKLOAD = 1.2
 
 brick_workload: list[float] = []
-distance_matrix: list[list[float]] = []
+distance_rp_to_brick: list[list[float]] = []
+"""[brick][rp]"""
+distance_brick_to_brick: list[list[float]] = []
 
 with open("brick_rp_distances10-100.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
-        distance_matrix.append(list(map(float, row[1:])))
+        distance_rp_to_brick.append(list(map(float, row[1:])))
 
 
 with open("bricks_index_values10-100.csv", mode="r") as file:
@@ -32,15 +34,15 @@ initial_repartition = {
     for brick in bricks
 }
 
-N_SR = len(initial_repartition_idx)
+N_SR = len(initial_repartition_idx) + 1
 N_bricks = len(brick_workload)
 
 
 def compute_distances(vars: list[list[Var]]) -> LinExpr:
     distances = LinExpr()
-    for sr_idx in range(N_SR):
+    for sr_idx in range(N_SR - 1):
         for brick in range(N_bricks):
-            distances += vars[brick][sr_idx] * distance_matrix[brick][sr_idx]
+            distances += vars[brick][sr_idx] * distance_rp_to_brick[brick][sr_idx]
     return distances
 
 
@@ -62,7 +64,7 @@ def compute_disruption(vars: list[list[Var]]) -> LinExpr:
     # return sum(brick_workload[i] * ((vars[i][j] - int(i in initial_repartition_idx[j]))**2) for i in range(N_bricks) for j in range(N_SR))
 
 
-def compute_solutions(m, vars):
+def compute_solutions(m: Model, vars: list[list[Var]]) -> list:
     best_solutions = []
 
     m.setObjective(compute_distances(vars), GRB.MINIMIZE)
