@@ -24,14 +24,13 @@ with open("brick_rp_distances.csv", mode="r") as file:
         distance_matrix.append(list(map(float, row[1:])))
 
 
-with open("bricks_index_values.csv", mode="r") as file:
+
 with open("bricks_index_values.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
         brick_workload.append(float(row[1]))
 
-with open("brick_rp_affectation.json", mode="r") as file:
 with open("brick_rp_affectation.json", mode="r") as file:
     initial_repartition_idx = json.load(file)
 
@@ -60,12 +59,12 @@ def compute_workloads(vars: list[list[Var]]) -> list[LinExpr]:
             workloads[sr_idx] += vars[brick][sr_idx] * brick_workload[brick]
     return workloads
 
-def compute_size_disruption(vars: list[list[Var]]) -> LinExpr:
-    size_disruption = LinExpr()
+def compute_size_disruption(vars: list[list[Var]]):
+    size_disruption = 0
     for sr_idx in range(N_SR):
         for brick in range(N_bricks):
-            if sr_idx != initial_repartition[brick]:  # Only consider changes in assignments
-                size_disruption += vars[brick][sr_idx]
+            if sr_idx != initial_repartition[brick] and vars[brick][sr_idx].X == 1:  
+                size_disruption += 1
                 break
     return size_disruption
 
@@ -91,7 +90,7 @@ def compute_solutions(m, vars):
         best_solutions.append({
             "objVal": m.objVal, 
             "disruption": compute_disruption(vars).getValue(),
-            "size_disruption": compute_size_disruption(vars).getValue(),
+            "size_disruption": compute_size_disruption(vars),
             "total_distance": compute_distances(vars).getValue(), 
             "max_workload": max([workload.getValue() for workload in compute_workloads(vars)])
         })
@@ -162,7 +161,7 @@ def get_non_dominated_solutions(plot = False):
         plt.title("Distance vs Disruption")
         plt.grid(True)
         plt.savefig("Non_Dominated_Solutions.png")
-    
+    print(non_dominated_solutions)
     return non_dominated_solutions
 
 if __name__ == "__main__":
