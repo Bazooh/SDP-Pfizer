@@ -1,4 +1,4 @@
-from gurobipy import Model, GRB, QuadExpr, Var, LinExpr
+from gurobipy import Constr, Model, GRB, QuadExpr, Var, LinExpr
 import csv
 import json
 import matplotlib.pyplot as plt
@@ -12,12 +12,8 @@ distance_rp_to_brick: list[list[float]] = []
 """[brick][rp]"""
 distance_brick_to_brick: list[list[float]] = []
 
-with open("brick_rp_distances.csv", mode="r") as file:
-    reader = csv.reader(file, delimiter=",")
-    next(reader)
-    for row in reader:
-        distance_rp_to_brick.append(list(map(float, row[1:])))
-
+with open("brick_rp_affectation.json", mode="r") as file:
+    initial_repartition_idx = json.load(file)
 
 with open("bricks_index_values.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
@@ -25,8 +21,20 @@ with open("bricks_index_values.csv", mode="r") as file:
     for row in reader:
         brick_workload.append(float(row[1]))
 
-with open("brick_rp_affectation.json", mode="r") as file:
-    initial_repartition_idx = json.load(file)
+N_SR = len(initial_repartition_idx)
+N_bricks = len(brick_workload)
+initial_offices: list[list[int]] = [[] for _ in range(N_SR)]
+
+with open("brick_rp_distances.csv", mode="r") as file:
+    reader = csv.reader(file, delimiter=",")
+    next(reader)
+    for i, row in enumerate(reader):
+        dist = list(map(float, row[1:]))
+        distance_rp_to_brick.append(dist)
+        if 0.0 in dist:
+            initial_offices[dist.index(0.0)] = [
+                (1 if i == brick else 0) for brick in range(N_bricks)
+            ]
 
 with open("distances22-4.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
@@ -39,11 +47,6 @@ initial_repartition = {
     for sr_idx, bricks in initial_repartition_idx.items()
     for brick in bricks
 }
-
-N_SR = len(initial_repartition_idx)
-N_bricks = len(brick_workload)
-
-initialOffices: list[list[int]] = []
 
 
 def compute_distances(vars: list[list[Var]], main_vars: list[list[Var]]) -> QuadExpr:
@@ -68,13 +71,22 @@ def compute_workloads(vars: list[list[Var]]) -> list[LinExpr]:
 
 
 def compute_disruption(
-    main_vars: list[list[Var]], initialOffices: list[list[int]]
+    main_vars: list[list[Var]], initial_offices: list[list[int]]
 ) -> LinExpr:
     disruption = LinExpr()
-    for SR in range(N_SR):
+    for sr_idx in range(N_SR):
         for brick in range(N_bricks):
-            disruption += main_vars[brick][SR] * initialOffices[brick][SR]
+            disruption += main_vars[brick][sr_idx] * initial_offices[sr_idx][brick]
     return disruption
+
+
+def compute_workload_error(vars):
+    max_workload_error = 0
+    for var in compute_workloads(vars):
+        max_workload_error = max(max_workload_error, abs(1 - var.getValue()))
+
+    threshold_workload = max_workload_error - epsilon
+    return threshold_workload
 
 
 def compute_solutions(
@@ -86,28 +98,40 @@ def compute_solutions(
 
     m.optimize()
 
-    max_workload_error = 0
-    for var in compute_workloads(vars):
-        max_workload_error = max(max_workload_error, abs(1 - var.getValue()))
+    threshold_workload = compute_workload_error(vars)
+    threshold_disruption = (
+        compute_disruption(main_vars, initial_offices).getValue() - epsilon
+    )
 
-    threshold_workload = max_workload_error - epsilon
-
+    i = 0
     while m.Status == GRB.OPTIMAL:
-        workloads = compute_workloads(vars)
+        best_solutions.append(
+            (
+                m.objVal,
+                compute_workload_error(vars),
+                compute_disruption(main_vars, initial_offices).getValue(),
+            )
+        )
 
-        best_solutions.append((m.objVal, threshold_workload + epsilon))
+        constraints: list[Constr] = []
+        if i % 2 == 0:
+            workloads = compute_workloads(vars)
+            threshold_workload = compute_workload_error(vars)
 
-        max_workload_error = 0
-        for var in workloads:
-            max_workload_error = max(max_workload_error, abs(1 - var.getValue()))
+            for i in range(N_SR):
+                constraints.append(m.addConstr(workloads[i] <= 1 + threshold_workload))
+                constraints.append(m.addConstr(workloads[i] >= 1 - threshold_workload))
 
-        threshold_workload = max_workload_error - epsilon
+        else:
+            disruption = compute_disruption(main_vars, initial_offices)
 
-        for i in range(N_SR):
-            m.addConstr(workloads[i] <= 1 + threshold_workload)
-            m.addConstr(workloads[i] >= 1 - threshold_workload)
+            threshold_disruption = disruption.getValue() - epsilon
+            constraints.append(m.addConstr(disruption <= threshold_disruption))
 
         m.optimize()
+        m.remove(constraints)
+        
+        i += 1
 
     return best_solutions
 
@@ -148,23 +172,9 @@ def main():
             s += vars[brick][sr_idx]
         m.addConstr(s == 1)
 
-    # Disruption
-    # m.setObjective(compute_disruption(vars), GRB.MAXIMIZE)
-    # m.optimize()
-    # print("Disruption: ", m.objVal)
-    # Best disruption : 0.1696
-
-    # Distance
-    # m.setObjective(compute_distances(m, vars), GRB.MAXIMIZE)
-    # m.optimize()
-    # print("Distance: ", m.objVal)
-    # Best distance : 154.62
-
     # Multi-objective, with epsilon-constraint strategy
     # We fix the disruption, and optimize the distance
     best_solutions = compute_solutions(m, vars, main_vars)
-
-    # print("number of solutions:", len(best_solutions))
 
     plt.figure(figsize=(10, 6))
     plt.scatter(
