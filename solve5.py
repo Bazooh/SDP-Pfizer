@@ -1,4 +1,4 @@
-from gurobipy import Constr, Model, GRB, Var, LinExpr
+from gurobipy import Model, GRB, QuadExpr, Var, LinExpr
 import csv
 import json
 import matplotlib.pyplot as plt
@@ -43,25 +43,20 @@ initial_repartition = {
 N_SR = len(initial_repartition_idx)
 N_bricks = len(brick_workload)
 
+initialOffices: list[list[int]] = []
 
-def compute_distances(model: Model, vars: list[list[Var]]) -> LinExpr:
-    distances = LinExpr()
+
+def compute_distances(vars: list[list[Var]], main_vars: list[list[Var]]) -> QuadExpr:
+    distances = QuadExpr()
     for sr_idx in range(N_SR):
-        best_distance = model.addVar(vtype=GRB.CONTINUOUS)
-
         for main_brick in range(N_bricks):
-            distance = LinExpr()
             for brick in range(N_bricks):
-                distance += (
-                    vars[main_brick][sr_idx]
+                distances += (
+                    main_vars[main_brick][sr_idx]
                     * vars[brick][sr_idx]
                     * distance_brick_to_brick[main_brick][brick]
                 )
-            model.addConstr(best_distance >= distance)
-
-        distances += best_distance
-
-    return -distances
+    return distances
 
 
 def compute_workloads(vars: list[list[Var]]) -> list[LinExpr]:
@@ -72,67 +67,56 @@ def compute_workloads(vars: list[list[Var]]) -> list[LinExpr]:
     return workloads
 
 
-def compute_disruption(vars: list[list[Var]]) -> LinExpr:
+def compute_disruption(
+    main_vars: list[list[Var]], initialOffices: list[list[int]]
+) -> LinExpr:
     disruption = LinExpr()
-    for brick in range(N_bricks):
-        sr_idx = initial_repartition[brick]
-        disruption += brick_workload[brick] * (1 - vars[brick][sr_idx])
+    for SR in range(N_SR):
+        for brick in range(N_bricks):
+            disruption += main_vars[brick][SR] * initialOffices[brick][SR]
     return disruption
 
 
-def compute_threshold_workload(vars: list[list[Var]]):
+def compute_solutions(
+    m: Model, vars: list[list[Var]], main_vars: list[list[Var]]
+) -> list:
+    best_solutions = []
+
+    m.setObjective(compute_distances(vars, main_vars), GRB.MINIMIZE)
+
+    m.optimize()
+
     max_workload_error = 0
     for var in compute_workloads(vars):
         max_workload_error = max(max_workload_error, abs(1 - var.getValue()))
 
     threshold_workload = max_workload_error - epsilon
-    return threshold_workload
-
-
-def compute_workload_solutions(m: Model, vars: list[list[Var]]) -> list:
-    best_solutions = []
-
-    m.setObjective(compute_distances(m, vars), GRB.MAXIMIZE)
-    m.optimize()
-
-    threshold_workload = compute_threshold_workload(vars)
 
     while m.Status == GRB.OPTIMAL:
-        best_solutions.append((-m.objVal, threshold_workload + epsilon))
-
         workloads = compute_workloads(vars)
-        threshold_workload = compute_threshold_workload(vars)
 
-        added_constraints: list[Constr] = []
+        best_solutions.append((m.objVal, threshold_workload + epsilon))
+
+        max_workload_error = 0
+        for var in workloads:
+            max_workload_error = max(max_workload_error, abs(1 - var.getValue()))
+
+        threshold_workload = max_workload_error - epsilon
+
         for i in range(N_SR):
-            added_constraints.append(
-                m.addConstr(workloads[i] <= 1 + threshold_workload)
-            )
-            added_constraints.append(
-                m.addConstr(workloads[i] >= 1 - threshold_workload)
-            )
+            m.addConstr(workloads[i] <= 1 + threshold_workload)
+            m.addConstr(workloads[i] >= 1 - threshold_workload)
 
         m.optimize()
 
-        for added_constraint in added_constraints:
-            m.remove(added_constraint)
-
     return best_solutions
 
-
-def compute_solutions(m: Model, vars: list[list[Var]]) -> list:
-    best_solutions = []
-    
-    distances = compute_distances(m, vars)
-    m.setObjective(distances, GRB.MAXIMIZE)
-    m.optimize()
-    
-    
 
 def main():
     # initialize model
     m = Model("solve")
     vars: list[list[Var]] = []
+    main_vars: list[list[Var]] = []
 
     ###############
     # In our model, the ith variable represent which SR the ith block is allocated to
@@ -141,20 +125,28 @@ def main():
     # create variables
     for brick in range(N_bricks):
         v = []
+        main_v = []
         for sr_idx in range(N_SR):
             v.append(m.addVar(vtype=GRB.BINARY))
+            main_v.append(m.addVar(vtype=GRB.BINARY))
         vars.append(v)
+        main_vars.append(main_v)
 
     # create constraints
     workloads = compute_workloads(vars)
     for sr_idx in range(N_SR):
         m.addConstr(LOWER_WORKLOAD <= workloads[sr_idx])
         m.addConstr(workloads[sr_idx] <= UPPER_WORKLOAD)
+        s = LinExpr()
+        for brick in range(N_bricks):
+            s += main_vars[brick][sr_idx]
+        m.addConstr(s == 1)
+
     for brick in range(N_bricks):
-        sum = LinExpr()
+        s = LinExpr()
         for sr_idx in range(N_SR):
-            sum += vars[brick][sr_idx]
-        m.addConstr(sum == 1)
+            s += vars[brick][sr_idx]
+        m.addConstr(s == 1)
 
     # Disruption
     # m.setObjective(compute_disruption(vars), GRB.MAXIMIZE)
@@ -170,7 +162,7 @@ def main():
 
     # Multi-objective, with epsilon-constraint strategy
     # We fix the disruption, and optimize the distance
-    best_solutions = compute_solutions(m, vars)
+    best_solutions = compute_solutions(m, vars, main_vars)
 
     # print("number of solutions:", len(best_solutions))
 
