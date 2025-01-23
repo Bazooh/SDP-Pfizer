@@ -44,7 +44,9 @@ N_SR = len(initial_repartition_idx) + 1
 N_bricks = len(brick_workload)
 
 
-def compute_distances(model: Model, vars: list[list[Var]]) -> LinExpr:
+def compute_distances(
+    model: Model, vars: list[list[Var]], main_var: list[Var]
+) -> LinExpr:
     distances = LinExpr()
     for sr_idx in range(N_SR - 1):
         for brick in range(N_bricks):
@@ -56,7 +58,7 @@ def compute_distances(model: Model, vars: list[list[Var]]) -> LinExpr:
         distance = LinExpr()
         for brick in range(N_bricks):
             distance += (
-                vars[main_brick][N_SR - 1]
+                main_var[main_brick]
                 * vars[brick][N_SR - 1]
                 * distance_brick_to_brick[main_brick][brick]
             )

@@ -1,4 +1,4 @@
-from gurobipy import Model, GRB, Var, LinExpr
+from gurobipy import Constr, Model, GRB, Var, LinExpr
 import csv
 import json
 import matplotlib.pyplot as plt
@@ -78,42 +78,56 @@ def compute_disruption(vars: list[list[Var]]) -> LinExpr:
         sr_idx = initial_repartition[brick]
         disruption += brick_workload[brick] * (1 - vars[brick][sr_idx])
     return disruption
-    # print(list(brick_workload[i] * ((vars[i][j] - int(j in initial_repartition_idx[i]))**2) for i in range(N_bricks) for j in range(N_SR)))
-    # return sum(brick_workload[i] * ((vars[i][j] - int(i in initial_repartition_idx[j]))**2) for i in range(N_bricks) for j in range(N_SR))
 
 
-def compute_solutions(m: Model, vars: list[list[Var]]) -> list:
-    best_solutions = []
-
-    m.setObjective(compute_distances(m, vars), GRB.MAXIMIZE)
-
-    m.optimize()
-
+def compute_threshold_workload(vars: list[list[Var]]):
     max_workload_error = 0
     for var in compute_workloads(vars):
         max_workload_error = max(max_workload_error, abs(1 - var.getValue()))
 
     threshold_workload = max_workload_error - epsilon
+    return threshold_workload
+
+
+def compute_workload_solutions(m: Model, vars: list[list[Var]]) -> list:
+    best_solutions = []
+
+    m.setObjective(compute_distances(m, vars), GRB.MAXIMIZE)
+    m.optimize()
+
+    threshold_workload = compute_threshold_workload(vars)
 
     while m.Status == GRB.OPTIMAL:
-        workloads = compute_workloads(vars)
-
         best_solutions.append((-m.objVal, threshold_workload + epsilon))
 
-        max_workload_error = 0
-        for var in workloads:
-            max_workload_error = max(max_workload_error, abs(1 - var.getValue()))
+        workloads = compute_workloads(vars)
+        threshold_workload = compute_threshold_workload(vars)
 
-        threshold_workload = max_workload_error - epsilon
-
+        added_constraints: list[Constr] = []
         for i in range(N_SR):
-            m.addConstr(workloads[i] <= 1 + threshold_workload)
-            m.addConstr(workloads[i] >= 1 - threshold_workload)
+            added_constraints.append(
+                m.addConstr(workloads[i] <= 1 + threshold_workload)
+            )
+            added_constraints.append(
+                m.addConstr(workloads[i] >= 1 - threshold_workload)
+            )
 
         m.optimize()
 
+        for added_constraint in added_constraints:
+            m.remove(added_constraint)
+
     return best_solutions
 
+
+def compute_solutions(m: Model, vars: list[list[Var]]) -> list:
+    best_solutions = []
+    
+    distances = compute_distances(m, vars)
+    m.setObjective(distances, GRB.MAXIMIZE)
+    m.optimize()
+    
+    
 
 def main():
     # initialize model
