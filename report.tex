@@ -12,16 +12,50 @@
 \begin{document}
 
 \maketitle
-\tableofcontents
-\newpage
 
 \section*{Introduction}
 
+La structure de base de notre modélisation gurobi est la suivante : on a nombre\_SR x nombre\_briques variables booléennes, chacune indiquant si le SR correspondant s'occupe de la brique correspondante (True) ou non (False).\\
+Les fonctions suivantes sont définies en fonction de ces variables ainsi que des paramètres du problème :
+\begin{itemize}
+    \item compute\_distance
+    \item compute\_workload
+    \item compute\_disruption
+\end{itemize}
+Sauf indication contraire, la workload est traitée comme une contrainte : elle doit se situer dans un intervalle fixe (par exemple [0.8,1.2]).\\
+Les changements de structure spécifiques aux différents problèmes sont détaillés au cours du rapport.
+
 \section*{Step 1 : Briques Centrales Fixes}
 
+\subsection*{Mono-objectif}
+
+Les deux résolutions se font facilement avec la structure expliquée en Introduction, les résultats obtenus sont :
+\begin{itemize}
+    \item \textbf{Best disruption : 0.3391}
+    \item \textbf{Best distance : 309.24}
+\end{itemize}
+
+\subsection*{Bi-objectif}
+On implémente la schéma epsilon-constraint en optimisant la distance et en fixant la disruption.
+
+résultats :
+mettre 3 graphs ici et nb solutions pour chaque (flemme atm)
+
+\subsection*{Instance plus grosse}
+
+idem ,3 graphs, 3 nb solutions
 
 \section*{Step 2 : Extensions du Modèle}
 
+\subsection*{Assignation partielle des briques}
+Ici, on fait l'hypothèse que, si un SR est assigné partiellement à une brique, il a une workload partielle de la workload totale de la brique (au prorata); Idem pour les disruptions. En revanche, le SR doit tout de même faire l'entièreté du déplacement vers la brique si il a été assigné à une partie non nulle de la brique.
+\\
+Modification du modèle : les nombre\_SR x nombre\_briques variables ne sont plus booléennes mais entre 0 et 1, et doivent vérifier que la somme pour chaque brique vaut 1.
+On a aussi ajouté 2 x nombre\_SR x nombre\_briques variables booléennes pour implémenter le modèle.
+\\
+blabla mm results que avant car bad. 3 graphs, 3nb solu ?
+
+\subsection*{Ajout d'un nouveau SR}
 
 \section*{Step 3 : Modification des Briques Centrales}
 
