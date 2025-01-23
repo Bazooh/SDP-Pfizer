@@ -103,35 +103,44 @@ def compute_solutions(
         compute_disruption(main_vars, initial_offices).getValue() - epsilon
     )
 
+    workload_finished = False
+    disruption_finished = False
+
     i = 0
     while m.Status == GRB.OPTIMAL:
-        best_solutions.append(
-            (
-                m.objVal,
-                compute_workload_error(vars),
-                compute_disruption(main_vars, initial_offices).getValue(),
-            )
-        )
+        threshold_workload = compute_workload_error(vars)
+        disruption = compute_disruption(main_vars, initial_offices)
+
+        best_solutions.append((m.objVal, threshold_workload, disruption.getValue()))
 
         constraints: list[Constr] = []
         if i % 2 == 0:
+            if workload_finished:
+                continue
+
             workloads = compute_workloads(vars)
-            threshold_workload = compute_workload_error(vars)
 
             for i in range(N_SR):
                 constraints.append(m.addConstr(workloads[i] <= 1 + threshold_workload))
                 constraints.append(m.addConstr(workloads[i] >= 1 - threshold_workload))
 
         else:
-            disruption = compute_disruption(main_vars, initial_offices)
+            if disruption_finished:
+                continue
 
             threshold_disruption = disruption.getValue() - epsilon
             constraints.append(m.addConstr(disruption <= threshold_disruption))
 
         m.optimize()
         m.remove(constraints)
-        
+
         i += 1
+
+        # if m.Status != GRB.OPTIMAL:
+        #     if i % 2 == 0:
+        #         workload_finished = True
+        #     else:
+        #         disruption_finished = True
 
     return best_solutions
 
@@ -176,14 +185,18 @@ def main():
     # We fix the disruption, and optimize the distance
     best_solutions = compute_solutions(m, vars, main_vars)
 
-    plt.figure(figsize=(10, 6))
-    plt.scatter(
+    fig = plt.figure(figsize=(10, 6))
+    ax = fig.add_subplot(projection="3d")
+    ax.scatter(
         [solution[0] for solution in best_solutions],
         [solution[1] for solution in best_solutions],
+        [solution[2] for solution in best_solutions],
     )
-    plt.xlabel("Distance")
-    plt.ylabel("Disruption")
-    plt.title("Distance vs Disruption")
+    ax.set_xlabel("Distance")
+    ax.set_ylabel("Workload Error")
+    ax.set_zlabel("Disruption")  # type: ignore
+
+    plt.title("Distance vs Workload Error vs Disruption")
     plt.grid(True)
     plt.show()
 
