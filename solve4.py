@@ -137,30 +137,16 @@ def main():
         for brick in range(N_bricks):
             s += main_vars[brick][sr_idx]
         m.addConstr(s == 1)
-    
+
     for brick in range(N_bricks):
         s = LinExpr()
         for sr_idx in range(N_SR):
             s += vars[brick][sr_idx]
         m.addConstr(s == 1)
 
-    # Disruption
-    # m.setObjective(compute_disruption(vars), GRB.MAXIMIZE)
-    # m.optimize()
-    # print("Disruption: ", m.objVal)
-    # Best disruption : 0.1696
-
-    # Distance
-    # m.setObjective(compute_distances(m, vars), GRB.MAXIMIZE)
-    # m.optimize()
-    # print("Distance: ", m.objVal)
-    # Best distance : 154.62
-
     # Multi-objective, with epsilon-constraint strategy
     # We fix the disruption, and optimize the distance
     best_solutions = compute_solutions(m, vars, main_vars)
-
-    # print("number of solutions:", len(best_solutions))
 
     plt.figure(figsize=(10, 6))
     plt.scatter(
@@ -168,8 +154,8 @@ def main():
         [solution[1] for solution in best_solutions],
     )
     plt.xlabel("Distance")
-    plt.ylabel("Disruption")
-    plt.title("Distance vs Disruption")
+    plt.ylabel("Workload Loss")
+    plt.title("Distance vs Workload Loss")
     plt.grid(True)
     plt.show()
 
