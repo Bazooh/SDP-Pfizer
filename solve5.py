@@ -90,66 +90,79 @@ def compute_workload_error(vars):
 
 
 def compute_solutions(
-    m: Model, vars: list[list[Var]], main_vars: list[list[Var]]
+    m1: Model,
+    vars1: list[list[Var]],
+    main_vars1: list[list[Var]],
+    m2: Model,
+    vars2: list[list[Var]],
+    main_vars2: list[list[Var]],
 ) -> list:
     best_solutions = []
 
-    m.setObjective(compute_distances(vars, main_vars), GRB.MINIMIZE)
+    m1.setObjective(compute_distances(vars1, main_vars1), GRB.MINIMIZE)
+    m2.setObjective(compute_distances(vars2, main_vars2), GRB.MINIMIZE)
 
-    m.optimize()
+    m1.optimize()  # 1 is for workload
+    m2.optimize()  # 2 is for disruption
 
-    threshold_workload = compute_workload_error(vars)
+    threshold_workload = compute_workload_error(vars1)
     threshold_disruption = (
-        compute_disruption(main_vars, initial_offices).getValue() - epsilon
+        compute_disruption(main_vars2, initial_offices).getValue() - epsilon
     )
 
     workload_finished = False
     disruption_finished = False
 
-    i = 0
-    while m.Status == GRB.OPTIMAL:
-        threshold_workload = compute_workload_error(vars)
-        disruption = compute_disruption(main_vars, initial_offices)
+    while not (workload_finished and disruption_finished):
+        if not disruption_finished:
+            disruption = compute_disruption(main_vars2, initial_offices)
+            workload = compute_workload_error(vars2)
 
-        best_solutions.append((m.objVal, threshold_workload, disruption.getValue()))
+            threshold_disruption = (
+                min(disruption.getValue(), threshold_disruption) - epsilon
+            )
 
-        constraints: list[Constr] = []
-        if i % 2 == 0:
-            if workload_finished:
-                continue
+            best_solutions.append((m2.objVal, workload, disruption.getValue()))
 
-            workloads = compute_workloads(vars)
+            m2.addConstr(disruption <= threshold_disruption)
+
+            m2.optimize()
+            if m2.Status != GRB.OPTIMAL:
+                disruption_finished = True
+
+        if not workload_finished:
+            workload = compute_workload_error(vars1)
+            disruption = compute_disruption(main_vars1, initial_offices)
+
+            threshold_workload = min(workload, threshold_workload) - epsilon
+
+            best_solutions.append((m1.objVal, workload, disruption.getValue()))
+
+            workloads = compute_workloads(vars1)
 
             for i in range(N_SR):
-                constraints.append(m.addConstr(workloads[i] <= 1 + threshold_workload))
-                constraints.append(m.addConstr(workloads[i] >= 1 - threshold_workload))
+                m1.addConstr(workloads[i] <= 1 + threshold_workload)
+                m1.addConstr(workloads[i] >= 1 - threshold_workload)
 
-        else:
-            if disruption_finished:
-                continue
+            m1.optimize()
+            if m1.Status != GRB.OPTIMAL:
+                workload_finished = True
 
-            threshold_disruption = disruption.getValue() - epsilon
-            constraints.append(m.addConstr(disruption <= threshold_disruption))
-
-        m.optimize()
-        m.remove(constraints)
-
-        i += 1
-
-        # if m.Status != GRB.OPTIMAL:
-        #     if i % 2 == 0:
-        #         workload_finished = True
-        #     else:
-        #         disruption_finished = True
+    # remove duplicates
+    best_solutions = list(set(best_solutions))
 
     return best_solutions
 
 
 def main():
     # initialize model
-    m = Model("solve")
-    vars: list[list[Var]] = []
-    main_vars: list[list[Var]] = []
+    m1 = Model("solve")
+    vars1: list[list[Var]] = []
+    main_vars1: list[list[Var]] = []
+
+    m2 = Model("solve")
+    vars2: list[list[Var]] = []
+    main_vars2: list[list[Var]] = []
 
     ###############
     # In our model, the ith variable represent which SR the ith block is allocated to
@@ -160,30 +173,58 @@ def main():
         v = []
         main_v = []
         for sr_idx in range(N_SR):
-            v.append(m.addVar(vtype=GRB.BINARY))
-            main_v.append(m.addVar(vtype=GRB.BINARY))
-        vars.append(v)
-        main_vars.append(main_v)
+            v.append(m1.addVar(vtype=GRB.BINARY))
+            main_v.append(m1.addVar(vtype=GRB.BINARY))
+        vars1.append(v)
+        main_vars1.append(main_v)
+
+    for brick in range(N_bricks):
+        v = []
+        main_v = []
+        for sr_idx in range(N_SR):
+            v.append(m2.addVar(vtype=GRB.BINARY))
+            main_v.append(m2.addVar(vtype=GRB.BINARY))
+        vars2.append(v)
+        main_vars2.append(main_v)
 
     # create constraints
-    workloads = compute_workloads(vars)
+    workloads = compute_workloads(vars1)
     for sr_idx in range(N_SR):
-        m.addConstr(LOWER_WORKLOAD <= workloads[sr_idx])
-        m.addConstr(workloads[sr_idx] <= UPPER_WORKLOAD)
+        m1.addConstr(LOWER_WORKLOAD <= workloads[sr_idx])
+        m1.addConstr(workloads[sr_idx] <= UPPER_WORKLOAD)
         s = LinExpr()
         for brick in range(N_bricks):
-            s += main_vars[brick][sr_idx]
-        m.addConstr(s == 1)
+            s += main_vars1[brick][sr_idx]
+        m1.addConstr(s == 1)
 
     for brick in range(N_bricks):
         s = LinExpr()
         for sr_idx in range(N_SR):
-            s += vars[brick][sr_idx]
-        m.addConstr(s == 1)
+            s += vars1[brick][sr_idx]
+        m1.addConstr(s == 1)
+
+    workloads = compute_workloads(vars2)
+    for sr_idx in range(N_SR):
+        m2.addConstr(LOWER_WORKLOAD <= workloads[sr_idx])
+        m2.addConstr(workloads[sr_idx] <= UPPER_WORKLOAD)
+        s = LinExpr()
+        for brick in range(N_bricks):
+            s += main_vars2[brick][sr_idx]
+        m2.addConstr(s == 1)
+
+    for brick in range(N_bricks):
+        s = LinExpr()
+        for sr_idx in range(N_SR):
+            s += vars2[brick][sr_idx]
+        m2.addConstr(s == 1)
 
     # Multi-objective, with epsilon-constraint strategy
     # We fix the disruption, and optimize the distance
-    best_solutions = compute_solutions(m, vars, main_vars)
+    best_solutions = compute_solutions(m1, vars1, main_vars1, m2, vars2, main_vars2)
+
+    print("NB SOLUTIONS:", len(best_solutions))
+    for i in range(len(best_solutions)):
+        print(best_solutions[i])
 
     fig = plt.figure(figsize=(10, 6))
     ax = fig.add_subplot(projection="3d")
