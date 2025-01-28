@@ -36,14 +36,14 @@ Les deux résolutions se font facilement avec la structure expliquée en Introdu
 \end{itemize}
 
 \subsection*{Bi-objectif}
-On implémente la schéma epsilon-constraint en optimisant la distance et en fixant la disruption.
+On implémente le schéma epsilon-constraint en optimisant la distance et en "fixant" la disruption.
 
 résultats :
-mettre 3 graphs ici et nb solutions pour chaque (flemme atm)
+TODO mettre 3 graphs ici et nb solutions pour chaque (flemme atm) (solve.py)
 
 \subsection*{Instance plus grosse}
 
-idem ,3 graphs, 3 nb solutions
+TODO idem ,3 graphs, 3 nb solutions (solve.py)
 
 \section*{Step 2 : Extensions du Modèle}
 
@@ -53,12 +53,27 @@ Ici, on fait l'hypothèse que, si un SR est assigné partiellement à une brique
 Modification du modèle : les nombre\_SR x nombre\_briques variables ne sont plus booléennes mais entre 0 et 1, et doivent vérifier que la somme pour chaque brique vaut 1.
 On a aussi ajouté 2 x nombre\_SR x nombre\_briques variables booléennes pour implémenter le modèle.
 \\
-blabla mm results que avant car bad. 3 graphs, 3nb solu ?
+TODO blabla mm results que avant car bad. 3 graphs, 3nb solu ? (solve2.py)
 
 \subsection*{Ajout d'un nouveau SR}
 
+On doit ajouter un cinquième SR pour combler le 25\% de travail en plus. On peut choisir l'emplacement de son bureau.\\
+Pour faire cela, on ajoute nombre\_briques variables binaires, dont une unique vaut 1 encodant la position du nouveau bureau. De plus, on utilise QuadExpr() au lieu de LinExpr() pour pouvoir multiplier deux variables entre elles (le temps de calcul reste raisonnable).
+
+TODO plots, nbsolu (solve3.py)
+
 \section*{Step 3 : Modification des Briques Centrales}
 
+\subsection*{Bi-objectif avec positions des bureaux variables}
+Les deux objectifs sont : distance et workload. On oublie la disruption dans cette section. Pour le workload, on le quantifie par l'écart au workload idéal : 1. On veut minimiser cet écart.\\
+Ici, on utilise comme variables 2 tables de taille nombre\_SR x nombre\_briques chacune : une pour stocker les assignations des SR et l'autre pour stocker la position des bureaux. On utilise aussi QuadExpr() pour pouvoir multiplier les variables. (Il aurait aussi été possible d'utiliser LinExpr(), et d'avoir des variables correspondant à chacun des produits de deux variables dont on a besoin dans le calculs, mais on a préféré utiliser QuadExpr()).
+
+TODO : plot
+
+\subsection*{Tri-objectif}
+On utilise les 3 objectifs : distance, workload et disruption (nouvelle définition). On utilise un schéma epsilon-constraint double : On minimise la distance et on fixe des deux autres successivement. Voir le code pour les détails.
+
+TODO : rés, nb solutions
 
 \section*{Step 4 : Sélection des Solutions}
 
