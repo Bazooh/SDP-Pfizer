@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 
 epsilon = 0.001
 
-
 brick_workload: list[float] = []
 distance_rp_to_brick: list[list[float]] = []
 """[brick][rp]"""
@@ -187,7 +186,6 @@ def main():
         main_vars2.append(main_v)
 
     # create constraints
-    workloads = compute_workloads(vars1)
     for sr_idx in range(N_SR):
         s = LinExpr()
         for brick in range(N_bricks):
@@ -200,7 +198,6 @@ def main():
             s += vars1[brick][sr_idx]
         m1.addConstr(s == 1)
 
-    workloads = compute_workloads(vars2)
     for sr_idx in range(N_SR):
         s = LinExpr()
         for brick in range(N_bricks):
