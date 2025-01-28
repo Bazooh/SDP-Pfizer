@@ -4,8 +4,7 @@ import json
 import matplotlib.pyplot as plt
 
 epsilon = 0.001
-LOWER_WORKLOAD = 0.8
-UPPER_WORKLOAD = 1.2
+
 
 brick_workload: list[float] = []
 distance_rp_to_brick: list[list[float]] = []
@@ -190,8 +189,6 @@ def main():
     # create constraints
     workloads = compute_workloads(vars1)
     for sr_idx in range(N_SR):
-        m1.addConstr(LOWER_WORKLOAD <= workloads[sr_idx])
-        m1.addConstr(workloads[sr_idx] <= UPPER_WORKLOAD)
         s = LinExpr()
         for brick in range(N_bricks):
             s += main_vars1[brick][sr_idx]
@@ -205,8 +202,6 @@ def main():
 
     workloads = compute_workloads(vars2)
     for sr_idx in range(N_SR):
-        m2.addConstr(LOWER_WORKLOAD <= workloads[sr_idx])
-        m2.addConstr(workloads[sr_idx] <= UPPER_WORKLOAD)
         s = LinExpr()
         for brick in range(N_bricks):
             s += main_vars2[brick][sr_idx]
