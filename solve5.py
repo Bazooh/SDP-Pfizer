@@ -1,4 +1,4 @@
-from gurobipy import Constr, Model, GRB, QuadExpr, Var, LinExpr
+from gurobipy import Model, GRB, QuadExpr, Var, LinExpr
 import csv
 import json
 import matplotlib.pyplot as plt
