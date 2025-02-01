@@ -1,3 +1,6 @@
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), '../.'))
+
 from gurobipy import Model, GRB, QuadExpr, Var, LinExpr
 import csv
 import json
@@ -10,10 +13,10 @@ distance_rp_to_brick: list[list[float]] = []
 """[brick][rp]"""
 distance_brick_to_brick: list[list[float]] = []
 
-with open("brick_rp_affectation.json", mode="r") as file:
+with open("data/brick_rp_affectation.json", mode="r") as file:
     initial_repartition_idx = json.load(file)
 
-with open("bricks_index_values.csv", mode="r") as file:
+with open("data/bricks_index_values.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
@@ -23,7 +26,7 @@ N_SR = len(initial_repartition_idx)
 N_bricks = len(brick_workload)
 initial_offices: list[list[int]] = [[] for _ in range(N_SR)]
 
-with open("brick_rp_distances.csv", mode="r") as file:
+with open("data/brick_rp_distances.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for i, row in enumerate(reader):
@@ -34,7 +37,7 @@ with open("brick_rp_distances.csv", mode="r") as file:
                 (1 if i == brick else 0) for brick in range(N_bricks)
             ]
 
-with open("distances22-4.csv", mode="r") as file:
+with open("data/distances22-4.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
@@ -232,6 +235,7 @@ def main():
     plt.title("Distance vs Workload Error vs Disruption")
     plt.grid(True)
     plt.show()
+
 
 
 if __name__ == "__main__":

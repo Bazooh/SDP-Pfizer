@@ -1,7 +1,7 @@
 import os, csv
 
 ranked_instances = []
-with open("uta_decision_preferences.csv", mode="r") as file:
+with open("data/uta_decision_preferences.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:

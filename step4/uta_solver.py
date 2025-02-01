@@ -1,11 +1,12 @@
-
-from parse_uta_decision_preferences import ranked_instances
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), '../.'))
+from data.parse_uta_decision_preferences import ranked_instances
 import numpy as np
 from gurobipy import Model, Var, LinExpr
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Dict
-from solve import get_non_dominated_solutions
+from get_non_dominated_solutions import get_non_dominated_solutions
 
 
 EPSILON = 1e-6
@@ -81,7 +82,7 @@ def plot_results_criterion(vars: list[list[Var]], n, L):
     plt.ylabel("Score")
     plt.title("Linear Curves for Each Criteria")
     plt.legend()
-    plt.savefig("Criterion_Curves.png")
+    plt.savefig("step4/Criterion_Curves.png")
 
 
 def comparision(vars: list[list[Var]], n, L, new_instances_array, x_min, x_max, plot):
@@ -114,7 +115,7 @@ def comparision(vars: list[list[Var]], n, L, new_instances_array, x_min, x_max, 
         plt.ylabel("Scores")
         plt.xticks(rotation=25)
         plt.title("Scores of New Instances")
-        plt.savefig("UTA_Comparision.png")
+        plt.savefig("step4/UTA_Comparision.png")
     
     # Return sorted instances
     return  [

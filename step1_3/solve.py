@@ -1,3 +1,6 @@
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), '../.'))
+
 from gurobipy import Model, GRB, Var, LinExpr
 import csv
 import json
@@ -17,20 +20,20 @@ distance_matrix: list[list[float]] = []
 #     3: [0, 1, 2, 18, 19, 20, 21],
 # }
 
-with open("brick_rp_distances10-100.csv", mode="r") as file:
+with open("data/brick_rp_distances10-100.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
         distance_matrix.append(list(map(float, row[1:])))
 
 
-with open("bricks_index_values10-100.csv", mode="r") as file:
+with open("data/bricks_index_values10-100.csv", mode="r") as file:
     reader = csv.reader(file, delimiter=",")
     next(reader)
     for row in reader:
         brick_workload.append(float(row[1]))
 
-with open("brick_rp_affectation10-100.json", mode="r") as file:
+with open("data/brick_rp_affectation10-100.json", mode="r") as file:
     initial_repartition_idx = json.load(file)
 
 initial_repartition = {
