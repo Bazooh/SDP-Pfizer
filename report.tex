@@ -194,12 +194,44 @@ On utilise les 3 objectifs : distance, workload et disruption (nouvelle définit
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{figures/solve5.png}
+    \includegraphics[width=0.9\textwidth]{figures/solve5.png}
     \caption{Results for the tri-objective optimization.}
     \label{fig:solve2}
 \end{figure}
 
+
 \section*{Step 4 : Sélection des Solutions}
+
+Dans les trois premières étapes, la question abordée concerne le calcul des solutions non dominées pour le problème d'affectation. Le choix d'une solution spécifique dans l'ensemble des solutions non dominées reste à faire. 
+
+Dans cette nouvelle étape, il est demandé de développer un modèle de préférence additif en utilisant la méthode UTA afin de supporter le choix entre les solutions non dominées fournies par la section précédente.
+
+Un modèle additif linéaire par morceaux est généré à partir des données de préférences fournies.
+
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/step4_uta_comparision.png}
+        \caption{Score des solutions non dominées.}
+        \label{fig:uta_comparision}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/step4_uta_criterion.png}
+        \caption{Courbes des trois critères obtenues par UTA.}
+        \label{fig:uta_criterion}
+    \end{minipage}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figures/step4_uta_ranking.png}
+    \caption{Instances plottées en 3D et classées.}
+    \label{fig:uta_ranking}
+\end{figure}
 
 
 \section*{Conclusion}

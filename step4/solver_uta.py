@@ -6,7 +6,7 @@ from gurobipy import Model, Var, LinExpr
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Dict
-from get_non_dominated_solutions import get_non_dominated_solutions
+from step4.get_solutions import get_non_dominated_solutions
 
 
 EPSILON = 1e-6
@@ -73,7 +73,7 @@ def print_results(vars: list[list[Var]], errors: list[Var], n, L):
 
 
 def plot_results_criterion(vars: list[list[Var]], n, L):
-    plt.figure(figsize=((14,6)))
+    plt.figure(figsize=((8, 8)))
     for i in range(n):
         x_vals = np.linspace(0, 1, L[i] + 1)
         y_vals = [vars[i][k].X for k in range(L[i] + 1)]
@@ -82,7 +82,7 @@ def plot_results_criterion(vars: list[list[Var]], n, L):
     plt.ylabel("Score")
     plt.title("Linear Curves for Each Criteria")
     plt.legend()
-    plt.savefig("step4/Criterion_Curves.png")
+    plt.savefig("figures/step4_uta_criterion.png")
 
 
 def comparision(vars: list[list[Var]], n, L, new_instances_array, x_min, x_max, plot):
@@ -104,19 +104,23 @@ def comparision(vars: list[list[Var]], n, L, new_instances_array, x_min, x_max, 
     sorted_labels = [f"I({i + 1})" for i in sorted_indices]
     
     if plot:
-        # Plot
-        plt.figure(figsize=(14,6))
+        # Normalize scores for colormap
+        import matplotlib.cm as cm
+        norm = plt.Normalize(min(sorted_scores), max(sorted_scores))
+        colors = plt.get_cmap("coolwarm")(norm(sorted_scores))  # Change "viridis" to another cmap if needed
+        plt.figure(figsize=(8, 8))
         plt.bar(
             range(len(sorted_scores)),
             sorted_scores,
             tick_label=sorted_labels,
+            color=colors,  # Apply colormap
         )
         plt.xlabel("Instances")
         plt.ylabel("Scores")
         plt.xticks(rotation=25)
         plt.title("Scores of New Instances")
-        plt.savefig("step4/UTA_Comparision.png")
-    
+        plt.savefig("figures/step4_uta_comparision.png")
+        
     # Return sorted instances
     return  [
         {
@@ -134,6 +138,7 @@ def main(references_dict, new_instances_dict):
     ############### Get the arrays ###############
     new_instances_dict = get_non_dominated_solutions()
     reference_instances_array, new_instances_array = convert_dictionnaries_to_array(references_dict, new_instances_dict)
+    new_instances_array = new_instances_array[new_instances_array[:, 1] < 1.45]
     n_instances, n = reference_instances_array.shape
     L: list[int] = [3 for _ in range(n)]
     x_min: np.ndarray = np.min(np.concatenate([reference_instances_array, new_instances_array]), axis=0)
@@ -190,8 +195,32 @@ def main(references_dict, new_instances_dict):
     print("-" *100)
     plot_results_criterion(vars = vars, n=n, L=L)
     new_instances_ranked = comparision(vars = vars, n=n, L=L, new_instances_array= new_instances_array, x_max=x_max, x_min=x_min, plot=True)
+    
     for new_instance in new_instances_ranked:
         print(new_instance)
+
+    # Extract the data
+    distances = [solution["total_distance"] for solution in new_instances_ranked]
+    workloads = [solution["max_workload"] for solution in new_instances_ranked]
+    disruptions = [solution["size_disruption"] for solution in new_instances_ranked]
+    ranks = [solution["rank"] for solution in new_instances_ranked]
+
+    fig = plt.figure(figsize=(10, 6))
+    ax = fig.add_subplot(projection="3d")
+    ax.view_init(elev=40, azim=-135)  # Adjust elevation and azimuth
+    ax.scatter(distances, workloads, disruptions, c=ranks, cmap="coolwarm_r", alpha=1.0, s=100)
+
+    # Annotate the top 5 points
+    for i in range(5):  # Assuming new_instances_ranked is sorted by rank
+        ax.text(distances[i], workloads[i], disruptions[i] + 0.1, f"Rank {1 + i}", fontsize=10, color="black")
+        
+    ax.set_xlabel("Distance")
+    ax.set_ylabel("Max Workload")
+    ax.set_zlabel("Disruption")  
+
+    plt.title("Distance vs Max Workload vs Disruption")
+    plt.grid(True)
+    plt.savefig("figures/step4_uta_ranking.png")
 
 if __name__ == "__main__":
     main(references_dict=ranked_instances, new_instances_dict={})  

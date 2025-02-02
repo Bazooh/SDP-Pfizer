@@ -6,6 +6,10 @@ import csv
 import json
 import matplotlib.pyplot as plt
 
+
+def all_duplicate(whole_dict):  
+    same = set()   #We check all the dictionaries with the help of same set created
+    return [dict(tuple(sorted(dupl.items()))) for dupl in whole_dict if tuple(sorted(dupl.items())) not in same and not same.add(tuple(sorted(dupl.items())))] 
 epsilon = 0.001
 
 brick_workload: list[float] = []
@@ -80,7 +84,6 @@ def compute_disruption(
             disruption += main_vars[brick][sr_idx] * initial_offices[sr_idx][brick]
     return disruption
 
-
 def compute_workload_error(vars):
     max_workload_error = 0
     for var in compute_workloads(vars):
@@ -123,7 +126,14 @@ def compute_solutions(
                 min(disruption.getValue(), threshold_disruption) - epsilon
             )
 
-            best_solutions.append((m2.objVal, workload, disruption.getValue()))
+            item2 = {
+                "size_disruption": disruption.getValue(),
+                "total_distance": compute_distances(vars2, main_vars2).getValue(),
+                "max_workload": max(
+                    [workload.getValue() for workload in compute_workloads(vars2)]
+                ),
+            }
+            best_solutions.append(item2)
 
             m2.addConstr(disruption <= threshold_disruption)
 
@@ -137,7 +147,14 @@ def compute_solutions(
 
             threshold_workload = min(workload, threshold_workload) - epsilon
 
-            best_solutions.append((m1.objVal, workload, disruption.getValue()))
+            item1 = {
+                "size_disruption": disruption.getValue(),
+                "total_distance": compute_distances(vars1, main_vars1).getValue(),
+                "max_workload": max(
+                    [workload.getValue() for workload in compute_workloads(vars1)]
+                ),
+            }
+            best_solutions.append(item1)
 
             workloads = compute_workloads(vars1)
 
@@ -149,13 +166,10 @@ def compute_solutions(
             if m1.Status != GRB.OPTIMAL:
                 workload_finished = True
 
-    # remove duplicates
-    best_solutions = list(set(best_solutions))
-
-    return best_solutions
+    return all_duplicate(best_solutions)
 
 
-def main():
+def get_non_dominated_solutions():
     # initialize model
     m1 = Model("solve")
     vars1: list[list[Var]] = []
@@ -221,24 +235,5 @@ def main():
     for i in range(len(best_solutions)):
         print(best_solutions[i])
 
-    fig = plt.figure(figsize=(10, 6))
-    ax = fig.add_subplot(projection="3d")
-    ax.view_init(elev=40, azim=-135)  # Adjust elevation and azimuth
-    ax.scatter(
-        [solution[0] for solution in best_solutions],
-        [solution[1] for solution in best_solutions],
-        [solution[2] for solution in best_solutions],
-        s = 100
-    )
-    ax.set_xlabel("Distance")
-    ax.set_ylabel("Workload Error")
-    ax.set_zlabel("Disruption")  # type: ignore
+    return(best_solutions)
 
-    plt.title("Distance vs Workload Error vs Disruption")
-    plt.grid(True)
-    plt.show()
-    plt.savefig("figures/solve5.png")
-
-
-if __name__ == "__main__":
-    main()
